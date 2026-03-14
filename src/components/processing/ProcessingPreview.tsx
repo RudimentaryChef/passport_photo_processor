@@ -3,17 +3,19 @@
 import { useState, useEffect } from 'react';
 import { usePhoto } from '@/context/PhotoContext';
 import { useImageProcessing } from '@/hooks/useImageProcessing';
-import { getImageDimensions, getDataUrlSizeKB } from '@/lib/imageProcessing';
-import { runAllValidations } from '@/lib/validation';
+import { getImageDimensions, getDataUrlSizeKB, sharpenImage } from '@/lib/imageProcessing';
+import { runAllValidations, computeBlurScore } from '@/lib/validation';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
-import { Loader2, Zap } from 'lucide-react';
+import { Loader2, Zap, Sparkles } from 'lucide-react';
 
 export default function ProcessingPreview() {
   const { state, dispatch } = usePhoto();
   const { processImage, isProcessing, error } = useImageProcessing();
   const { settings } = state;
   const [imageInfo, setImageInfo] = useState<{ width: number; height: number; sizeKB: number } | null>(null);
+  const [isSharpening, setIsSharpening] = useState(false);
+  const [blurScore, setBlurScore] = useState<number | null>(null);
 
   const sourceImage = state.photo.processedDataUrl || state.photo.croppedDataUrl || state.photo.originalDataUrl;
 
@@ -33,6 +35,21 @@ export default function ProcessingPreview() {
     }
   };
 
+  const handleSharpen = async () => {
+    if (!state.photo.finalDataUrl) return;
+    setIsSharpening(true);
+    try {
+      const sharpened = await sharpenImage(state.photo.finalDataUrl, 0.8);
+      dispatch({ type: 'SET_FINAL_PHOTO', payload: sharpened });
+    } catch {
+      // Sharpening failed
+    } finally {
+      setIsSharpening(false);
+    }
+  };
+
+  const isBlurry = blurScore !== null && blurScore < 100;
+
   // Get image info for final photo
   useEffect(() => {
     if (state.photo.finalDataUrl) {
@@ -40,6 +57,15 @@ export default function ProcessingPreview() {
         const dims = await getImageDimensions(state.photo.finalDataUrl!);
         const sizeKB = await getDataUrlSizeKB(state.photo.finalDataUrl!);
         setImageInfo({ ...dims, sizeKB });
+
+        // Compute blur score
+        let score: number | null = null;
+        try {
+          score = await computeBlurScore(state.photo.finalDataUrl!);
+        } catch {
+          // Blur detection failed — leave as null (pending)
+        }
+        setBlurScore(score);
 
         // Run validations
         const results = runAllValidations(
@@ -49,6 +75,7 @@ export default function ProcessingPreview() {
           state.photo.faceDetection,
           state.photo.finalDataUrl,
           settings,
+          score,
         );
         dispatch({ type: 'SET_VALIDATION_RESULTS', payload: results });
       })();
@@ -88,6 +115,28 @@ export default function ProcessingPreview() {
         {error && (
           <div className="text-sm text-amber-600 bg-amber-50 border border-amber-200 rounded-lg p-3">
             {error}
+          </div>
+        )}
+
+        {/* Sharpen button when blur detected */}
+        {isBlurry && state.photo.finalDataUrl && (
+          <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex items-center justify-between">
+            <div className="text-sm text-amber-700">
+              Image appears blurry (score: {Math.round(blurScore!)}). Try sharpening it.
+            </div>
+            <Button variant="secondary" onClick={handleSharpen} disabled={isSharpening}>
+              {isSharpening ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                  Sharpening...
+                </>
+              ) : (
+                <>
+                  <Sparkles className="w-4 h-4 mr-1" />
+                  Sharpen
+                </>
+              )}
+            </Button>
           </div>
         )}
 

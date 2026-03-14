@@ -39,6 +39,7 @@ export const VALIDATIONS = {
   FOREHEAD_VISIBLE: 'forehead-visible',
   NO_RED_EYE: 'no-red-eye',
   EVEN_LIGHTING: 'even-lighting',
+  BLUR_CHECK: 'blur-check',
 } as const;
 
 // MediaPipe Face Detection

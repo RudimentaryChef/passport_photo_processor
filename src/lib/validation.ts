@@ -69,6 +69,103 @@ export function validateFaceDetected(faceDetection: FaceDetectionResult | null):
   };
 }
 
+/**
+ * Compute Laplacian variance to measure image sharpness.
+ * Returns a score — higher means sharper.
+ */
+function laplacianVariance(imageData: ImageData): number {
+  const { width, height, data } = imageData;
+
+  // Convert to grayscale
+  const gray = new Float64Array(width * height);
+  for (let i = 0; i < width * height; i++) {
+    const r = data[i * 4];
+    const g = data[i * 4 + 1];
+    const b = data[i * 4 + 2];
+    gray[i] = 0.299 * r + 0.587 * g + 0.114 * b;
+  }
+
+  // Apply Laplacian kernel [0,1,0; 1,-4,1; 0,1,0]
+  const laplacian = new Float64Array(width * height);
+  for (let y = 1; y < height - 1; y++) {
+    for (let x = 1; x < width - 1; x++) {
+      const idx = y * width + x;
+      laplacian[idx] =
+        gray[idx - width] +
+        gray[idx - 1] +
+        -4 * gray[idx] +
+        gray[idx + 1] +
+        gray[idx + width];
+    }
+  }
+
+  // Compute variance
+  let sum = 0;
+  let sumSq = 0;
+  const count = (width - 2) * (height - 2);
+  for (let y = 1; y < height - 1; y++) {
+    for (let x = 1; x < width - 1; x++) {
+      const val = laplacian[y * width + x];
+      sum += val;
+      sumSq += val * val;
+    }
+  }
+  const mean = sum / count;
+  return sumSq / count - mean * mean;
+}
+
+// Threshold below which an image is considered blurry
+const BLUR_THRESHOLD = 100;
+
+export function validateBlur(blurScore: number | null): ValidationResult {
+  if (blurScore === null) {
+    return {
+      id: VALIDATIONS.BLUR_CHECK,
+      label: 'Image Sharpness',
+      description: 'Photo must not be blurry — clean the camera lens',
+      status: 'pending',
+      details: 'Blur detection not yet run',
+    };
+  }
+
+  const isSharp = blurScore >= BLUR_THRESHOLD;
+  return {
+    id: VALIDATIONS.BLUR_CHECK,
+    label: 'Image Sharpness',
+    description: 'Photo must not be blurry — clean the camera lens',
+    status: isSharp ? 'pass' : 'fail',
+    details: isSharp
+      ? `Sharp (score: ${Math.round(blurScore)})`
+      : `Blurry — clean camera lens and retake (score: ${Math.round(blurScore)})`,
+  };
+}
+
+/**
+ * Compute blur score from a data URL. Runs client-side using a canvas.
+ */
+export function computeBlurScore(imageDataUrl: string): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      // Downscale for performance — 300px wide is enough for blur detection
+      const scale = Math.min(1, 300 / img.width);
+      canvas.width = Math.round(img.width * scale);
+      canvas.height = Math.round(img.height * scale);
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        reject(new Error('Could not get canvas context'));
+        return;
+      }
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      resolve(laplacianVariance(imageData));
+    };
+    img.onerror = () => reject(new Error('Failed to load image for blur detection'));
+    img.src = imageDataUrl;
+  });
+}
+
 export function validateWhiteBackground(imageDataUrl: string | null): ValidationResult {
   // This is a simplified check — samples corner pixels
   if (!imageDataUrl) {
@@ -158,11 +255,13 @@ export function runAllValidations(
   faceDetection: FaceDetectionResult | null,
   processedDataUrl: string | null,
   settings: AppSettings,
+  blurScore: number | null = null,
 ): ValidationResult[] {
   return [
     validateDimensions(width, height, settings),
     validateFileSize(sizeKB, settings),
     validateFormat(),
+    validateBlur(blurScore),
     validateWhiteBackground(processedDataUrl),
     ...getManualChecks(),
   ];

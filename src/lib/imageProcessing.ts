@@ -65,6 +65,62 @@ export async function compressImageClient(
   return result;
 }
 
+/**
+ * Apply unsharp mask to sharpen an image.
+ * amount: strength of sharpening (0-1, default 0.5)
+ */
+export async function sharpenImage(
+  dataUrl: string,
+  amount: number = 0.5,
+): Promise<string> {
+  const img = await loadImage(dataUrl);
+  const canvas = document.createElement('canvas');
+  canvas.width = img.naturalWidth;
+  canvas.height = img.naturalHeight;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('Failed to get canvas context');
+
+  ctx.drawImage(img, 0, 0);
+  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const { data, width, height } = imageData;
+
+  // Create a blurred copy using a simple 3x3 box blur
+  const blurred = new Uint8ClampedArray(data.length);
+  for (let y = 1; y < height - 1; y++) {
+    for (let x = 1; x < width - 1; x++) {
+      for (let c = 0; c < 3; c++) {
+        const idx = (y * width + x) * 4 + c;
+        blurred[idx] = (
+          data[((y - 1) * width + (x - 1)) * 4 + c] +
+          data[((y - 1) * width + x) * 4 + c] +
+          data[((y - 1) * width + (x + 1)) * 4 + c] +
+          data[(y * width + (x - 1)) * 4 + c] +
+          data[(y * width + x) * 4 + c] +
+          data[(y * width + (x + 1)) * 4 + c] +
+          data[((y + 1) * width + (x - 1)) * 4 + c] +
+          data[((y + 1) * width + x) * 4 + c] +
+          data[((y + 1) * width + (x + 1)) * 4 + c]
+        ) / 9;
+      }
+      blurred[(y * width + x) * 4 + 3] = data[(y * width + x) * 4 + 3];
+    }
+  }
+
+  // Unsharp mask: original + amount * (original - blurred)
+  for (let y = 1; y < height - 1; y++) {
+    for (let x = 1; x < width - 1; x++) {
+      for (let c = 0; c < 3; c++) {
+        const idx = (y * width + x) * 4 + c;
+        const sharpened = data[idx] + amount * (data[idx] - blurred[idx]);
+        data[idx] = Math.max(0, Math.min(255, Math.round(sharpened)));
+      }
+    }
+  }
+
+  ctx.putImageData(imageData, 0, 0);
+  return canvas.toDataURL('image/jpeg', 0.95);
+}
+
 export async function resizeImageClient(
   dataUrl: string,
   targetWidth: number,

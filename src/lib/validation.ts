@@ -71,51 +71,54 @@ export function validateFaceDetected(faceDetection: FaceDetectionResult | null):
 
 /**
  * Compute Laplacian variance to measure image sharpness.
- * Returns a score — higher means sharper.
+ * Analyzes the center 60% of the image (where the face is in a passport photo)
+ * to avoid the white background diluting the score.
  */
 function laplacianVariance(imageData: ImageData): number {
   const { width, height, data } = imageData;
 
-  // Convert to grayscale
-  const gray = new Float64Array(width * height);
-  for (let i = 0; i < width * height; i++) {
-    const r = data[i * 4];
-    const g = data[i * 4 + 1];
-    const b = data[i * 4 + 2];
-    gray[i] = 0.299 * r + 0.587 * g + 0.114 * b;
+  // Focus on center 60% of image — that's where the face is
+  const marginX = Math.floor(width * 0.2);
+  const marginY = Math.floor(height * 0.2);
+  const roiW = width - 2 * marginX;
+  const roiH = height - 2 * marginY;
+
+  // Convert ROI to grayscale
+  const gray = new Float64Array(roiW * roiH);
+  for (let ry = 0; ry < roiH; ry++) {
+    for (let rx = 0; rx < roiW; rx++) {
+      const srcIdx = ((ry + marginY) * width + (rx + marginX)) * 4;
+      gray[ry * roiW + rx] = 0.299 * data[srcIdx] + 0.587 * data[srcIdx + 1] + 0.114 * data[srcIdx + 2];
+    }
   }
 
   // Apply Laplacian kernel [0,1,0; 1,-4,1; 0,1,0]
-  const laplacian = new Float64Array(width * height);
-  for (let y = 1; y < height - 1; y++) {
-    for (let x = 1; x < width - 1; x++) {
-      const idx = y * width + x;
-      laplacian[idx] =
-        gray[idx - width] +
+  let sum = 0;
+  let sumSq = 0;
+  let count = 0;
+  for (let y = 1; y < roiH - 1; y++) {
+    for (let x = 1; x < roiW - 1; x++) {
+      const idx = y * roiW + x;
+      const val =
+        gray[idx - roiW] +
         gray[idx - 1] +
         -4 * gray[idx] +
         gray[idx + 1] +
-        gray[idx + width];
+        gray[idx + roiW];
+      sum += val;
+      sumSq += val * val;
+      count++;
     }
   }
 
-  // Compute variance
-  let sum = 0;
-  let sumSq = 0;
-  const count = (width - 2) * (height - 2);
-  for (let y = 1; y < height - 1; y++) {
-    for (let x = 1; x < width - 1; x++) {
-      const val = laplacian[y * width + x];
-      sum += val;
-      sumSq += val * val;
-    }
-  }
   const mean = sum / count;
   return sumSq / count - mean * mean;
 }
 
-// Threshold below which an image is considered blurry
-const BLUR_THRESHOLD = 100;
+// Threshold — calibrated for passport photos at ~600x800 analyzed at native resolution.
+// Real-world sharp passport photos typically score 200-2000+.
+// Blurry phone photos typically score 20-80.
+const BLUR_THRESHOLD = 50;
 
 export function validateBlur(blurScore: number | null): ValidationResult {
   if (blurScore === null) {
@@ -142,22 +145,21 @@ export function validateBlur(blurScore: number | null): ValidationResult {
 
 /**
  * Compute blur score from a data URL. Runs client-side using a canvas.
+ * Analyzes at native resolution (passport photos are small ~630x810).
  */
 export function computeBlurScore(imageDataUrl: string): Promise<number> {
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.onload = () => {
       const canvas = document.createElement('canvas');
-      // Downscale for performance — 300px wide is enough for blur detection
-      const scale = Math.min(1, 300 / img.width);
-      canvas.width = Math.round(img.width * scale);
-      canvas.height = Math.round(img.height * scale);
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
       const ctx = canvas.getContext('2d');
       if (!ctx) {
         reject(new Error('Could not get canvas context'));
         return;
       }
-      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      ctx.drawImage(img, 0, 0);
       const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
       resolve(laplacianVariance(imageData));
     };

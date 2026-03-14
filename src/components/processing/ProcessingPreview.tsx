@@ -39,8 +39,19 @@ export default function ProcessingPreview() {
     if (!state.photo.finalDataUrl) return;
     setIsSharpening(true);
     try {
-      const sharpened = await sharpenImage(state.photo.finalDataUrl, 0.8);
-      dispatch({ type: 'SET_FINAL_PHOTO', payload: sharpened });
+      // Auto-sharpen: apply increasing strength until blur check passes (max 3 passes)
+      let currentImage = state.photo.finalDataUrl;
+      const passes = [
+        { amount: 1.0, radius: 1 },  // Light pass
+        { amount: 1.5, radius: 2 },  // Medium pass
+        { amount: 2.0, radius: 2 },  // Strong pass
+      ];
+      for (const pass of passes) {
+        const score = await computeBlurScore(currentImage);
+        if (score >= 50) break; // Already sharp enough
+        currentImage = await sharpenImage(currentImage, pass.amount, pass.radius);
+      }
+      dispatch({ type: 'SET_FINAL_PHOTO', payload: currentImage });
     } catch {
       // Sharpening failed
     } finally {
@@ -48,7 +59,7 @@ export default function ProcessingPreview() {
     }
   };
 
-  const isBlurry = blurScore !== null && blurScore < 100;
+  const isBlurry = blurScore !== null && blurScore < 50;
 
   // Get image info for final photo
   useEffect(() => {

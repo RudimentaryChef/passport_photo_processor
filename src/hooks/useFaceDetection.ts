@@ -4,7 +4,8 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import type { FaceDetectionResult } from '@/types';
 import { FACE_DETECTION_MODEL_URL } from '@/lib/constants';
 
-let detectorPromise: Promise<InstanceType<typeof import('@mediapipe/tasks-vision').FaceDetector>> | null = null;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let detectorPromise: Promise<any> | null = null;
 
 async function getOrCreateDetector() {
   if (detectorPromise) return detectorPromise;
@@ -70,7 +71,8 @@ export function useFaceDetection(imageDataUrl: string | null) {
       }
 
       const faceCoveragePercent = (bbox.height / img.naturalHeight) * 100;
-      const keypoints = (detection.keypoints ?? []).map((kp) => ({
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const keypoints = (detection.keypoints ?? []).map((kp: any) => ({
         x: kp.x,
         y: kp.y,
         name: kp.name ?? undefined,

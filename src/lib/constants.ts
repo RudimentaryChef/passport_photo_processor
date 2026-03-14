@@ -5,11 +5,11 @@ export const DEFAULT_SETTINGS: AppSettings = {
   photoWidth: 630,
   photoHeight: 810,
   photoMaxSizeKB: 250,
-  minFaceCoveragePercent: 70,
-  targetFaceCoveragePercent: 80,
-  maxFaceCoveragePercent: 90,
+  minFaceCoveragePercent: 50,
+  targetFaceCoveragePercent: 60,
+  maxFaceCoveragePercent: 75,
   signatureMaxSizeKB: 100,
-  jpegQuality: 92,
+  jpegQuality: 98,
 };
 
 // Computed from settings

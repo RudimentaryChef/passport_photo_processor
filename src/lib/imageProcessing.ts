@@ -42,7 +42,7 @@ export async function getDataUrlSizeKB(dataUrl: string): Promise<number> {
 export async function compressImageClient(
   dataUrl: string,
   maxSizeKB: number,
-  startQuality: number = 92,
+  startQuality: number = 98,
 ): Promise<string> {
   const img = await loadImage(dataUrl);
   const canvas = document.createElement('canvas');
@@ -52,12 +52,13 @@ export async function compressImageClient(
   if (!ctx) throw new Error('Failed to get canvas context');
   ctx.drawImage(img, 0, 0);
 
+  // Start high and drop slowly to preserve sharpness
   let quality = startQuality / 100;
   let result = canvas.toDataURL('image/jpeg', quality);
   let sizeKB = dataUrlToBlob(result).size / 1024;
 
-  while (sizeKB > maxSizeKB && quality > 0.1) {
-    quality -= 0.05;
+  while (sizeKB > maxSizeKB && quality > 0.3) {
+    quality -= 0.02;
     result = canvas.toDataURL('image/jpeg', quality);
     sizeKB = dataUrlToBlob(result).size / 1024;
   }
@@ -176,7 +177,7 @@ export async function sharpenImage(
   }
 
   ctx.putImageData(imageData, 0, 0);
-  return canvas.toDataURL('image/jpeg', 0.95);
+  return canvas.toDataURL('image/jpeg', 1.0);
 }
 
 export async function resizeImageClient(
@@ -191,5 +192,5 @@ export async function resizeImageClient(
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('Failed to get canvas context');
   ctx.drawImage(img, 0, 0, targetWidth, targetHeight);
-  return canvas.toDataURL('image/jpeg', 0.95);
+  return canvas.toDataURL('image/jpeg', 1.0);
 }

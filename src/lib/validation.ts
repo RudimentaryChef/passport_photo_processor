@@ -131,12 +131,12 @@ export function validateBlur(blurScore: number | null): ValidationResult {
   const isSharp = blurScore >= BLUR_THRESHOLD;
   return {
     id: VALIDATIONS.BLUR_CHECK,
-    label: 'Image Sharpness',
+    label: isSharp ? 'No Blur Detected' : 'Blur Detected',
     description: 'Photo must not be blurry — clean the camera lens',
     status: isSharp ? 'pass' : 'fail',
     details: isSharp
-      ? `Sharp (score: ${Math.round(blurScore)})`
-      : `Blurry — clean camera lens and retake (score: ${Math.round(blurScore)})`,
+      ? 'No blur detected — image is sharp'
+      : 'Blur detected — clean camera lens and retake or sharpen',
   };
 }
 

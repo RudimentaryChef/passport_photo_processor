@@ -93,6 +93,20 @@ export function validateWhiteBackground(imageDataUrl: string | null): Validation
 export function getManualChecks(): ValidationResult[] {
   return [
     {
+      id: VALIDATIONS.FACE_DETECTED,
+      label: 'Face Detected',
+      description: 'A face must be clearly visible in the photo',
+      status: 'manual',
+      details: 'Visually verify a face is clearly visible',
+    },
+    {
+      id: VALIDATIONS.FACE_COVERAGE,
+      label: 'Face Coverage (~80%)',
+      description: 'Face should cover approximately 80% of the photo height',
+      status: 'manual',
+      details: 'Visually verify face covers most of the photo',
+    },
+    {
       id: VALIDATIONS.DARK_CLOTHES,
       label: 'Dark Clothes',
       description: 'Wear dark-colored clothing',
@@ -149,8 +163,6 @@ export function runAllValidations(
     validateDimensions(width, height, settings),
     validateFileSize(sizeKB, settings),
     validateFormat(),
-    validateFaceDetected(faceDetection),
-    validateFaceCoverage(faceDetection, settings),
     validateWhiteBackground(processedDataUrl),
     ...getManualChecks(),
   ];
